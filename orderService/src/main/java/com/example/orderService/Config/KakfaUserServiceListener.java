@@ -24,14 +24,28 @@ public class KakfaUserServiceListener {
     @KafkaListener(topics = "userCreationTopic", groupId = "2")
     @Transactional
     public void userCreationEventListener(String data){
-        UUID id = UUID.fromString(data);
-        orderService.createEmptyOrder(id);
+
+        try{
+            UUID id = UUID.fromString(data);
+            orderService.createEmptyOrder(id);
+        }catch (
+                IllegalArgumentException a
+        ){
+            a.printStackTrace();
+        }
     }
 
     @KafkaListener(topics = "userDeletionTopic", groupId = "2")
     @Transactional
     public void userDeletionEventListener(String data){
-        UUID userID = UUID.fromString(data);
-        orderService.deleteByBuyerId(userID);
+
+        try{
+            UUID id = UUID.fromString(data);
+            orderService.deleteByBuyerId(id);
+        }catch (
+                IllegalArgumentException a
+        ){
+            a.printStackTrace();
+        }
     }
 }
