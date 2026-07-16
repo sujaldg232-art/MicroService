@@ -49,7 +49,6 @@ public class OrderService {
     public List<OrderLineRequestDto> validateOrderLines(List<OrderLineRequestDto> orderLines){
         List<OrderLineRequestDto> validOrderLineList = new ArrayList<>(orderLines);
         validOrderLineList.removeIf(orderLine -> {
-
             ProductValidationDtoResponse productValidationDto = productToOrderServiceGrpc.validateOrderLine(orderLine);
             return !productValidationDto.getIsValid();
         });
