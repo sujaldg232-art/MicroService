@@ -1,4 +1,3 @@
-
 version: '3.8'
 
 services:
@@ -22,18 +21,50 @@ services:
       - order-service
       - redis-server
 
-  shared-db:
+  user-db:
     image: mysql:8.1
-    container_name: shared-mysql
+    container_name: user-mysql
     environment:
       MYSQL_ROOT_PASSWORD: '1981'
       MYSQL_DATABASE: userdb
     ports:
       - "3305:3306"
     volumes:
-      - mysql_shared_data:/var/lib/mysql
+      - mysql_user_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  product-db:
+    image: mysql:8.1
+    container_name: product-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: '1981'
+      MYSQL_DATABASE: productdb
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql_product_data:/var/lib/mysql
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  order-db:
+    image: mysql:8.1
+    container_name: order-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: '1981'
+      MYSQL_DATABASE: orderdb
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_order_data:/var/lib/mysql
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -56,7 +87,6 @@ services:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
-      # FIX: Added KAFKA_LISTENERS to ensure Kafka explicitly binds to both ports
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
@@ -69,15 +99,13 @@ services:
     deploy:
       replicas: 1
     depends_on:
-      shared-db:
+      order-db:
         condition: service_healthy
       kafka:
         condition: service_started
     environment:
       - SERVER_PORT=8083
-      # FIX: Corrected internal database connection port from 3305 to 3306
-      - SPRING_DATASOURCE_URL=jdbc:mysql://shared-db:3306/orderdb?createDatabaseIfNotExist=true
-      # FIX: Corrected internal Kafka connection port from 9092 to 29092
+      - SPRING_DATASOURCE_URL=jdbc:mysql://order-db:3306/orderdb?createDatabaseIfNotExist=true
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
 
   user-service:
@@ -89,14 +117,14 @@ services:
     deploy:
       replicas: 1
     depends_on:
-      shared-db:
+      user-db:
         condition: service_healthy
       kafka:
         condition: service_started
     environment:
       - SERVER_PORT=8081
       - GRPC_SERVER_PORT=9090
-      - SPRING_DATASOURCE_URL=jdbc:mysql://shared-db:3306/userdb?createDatabaseIfNotExist=true
+      - SPRING_DATASOURCE_URL=jdbc:mysql://user-db:3306/userdb?createDatabaseIfNotExist=true
       - AUTH_KEY=CGeOyQCzO4qyiqyxOzRC+RbLXutHk9qlCTuh4Nr1aDPftNI3QAq7+ARsbcRQS/nX52tUshS5+MCPpIPfGj3vYA==
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
 
@@ -108,50 +136,17 @@ services:
     deploy:
       replicas: 1
     depends_on:
-      shared-db:
+      product-db:
         condition: service_healthy
       kafka:
         condition: service_started
     environment:
       - SERVER_PORT=8082
-      - SPRING_DATASOURCE_URL=jdbc:mysql://shared-db:3306/productdb?createDatabaseIfNotExist=true
+      - SPRING_DATASOURCE_URL=jdbc:mysql://product-db:3306/productdb?createDatabaseIfNotExist=true
       - AUTH_KEY=CGeOyQCzO4qyiqyxOzRC+RbLXutHk9qlCTuh5Nr1aDPftNI3QAq7+ARsbcRQS/nX52tUshS5+MCPpIPfGj3vYA==
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
 
 volumes:
-  mysql_shared_data:
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  mysql_user_data:
+  mysql_product_data:
+  mysql_order_data:
