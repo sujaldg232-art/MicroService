@@ -13,15 +13,14 @@ import com.example.productService.repo.CategoryRepo;
 import com.example.productService.repo.ProductRepo;
 import com.example.productService.repo.TagRepo;
 import jakarta.persistence.EntityNotFoundException;
+import org.example.grpc.OrderLineValidationOutPut;
+import org.example.grpc.OrderlineValidationDto;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -190,14 +189,109 @@ public class ProductService {
         return productMapper.entityToDto(updatedProduct);
     }
 
-    public ProductDto findById(UUID id){
-        return productMapper.entityToDto(productRepo.findById(id).orElse(null));
+    public OrderLineValidationOutPut isValid(OrderlineValidationDto data) {
+        try {
+            UUID productID = UUID.fromString(data.getProductID());
+            int quantity = data.getQuantity();
+            Product product = productRepo.findById(productID).orElse(null);
+
+            if (product == null) {
+                return OrderLineValidationOutPut.newBuilder()
+                        .setIsValid(false)
+                        .setSellerID("")
+                        .setPrice("-1")
+                        .setError("Product Not Found")
+                        .setErrorId(404)
+                        .build();
+            }
+
+            if (product.getStockQuantity() >= quantity) {
+                return OrderLineValidationOutPut.newBuilder()
+                        .setIsValid(true)
+                        .setSellerID(product.getSellerId().toString())
+                        .setPrice(product.getPrice().toString())
+                        .setError("")
+                        .setErrorId(-1)
+                        .build();
+            } else {
+                return OrderLineValidationOutPut.newBuilder()
+                        .setIsValid(false)
+                        .setSellerID(product.getSellerId().toString())
+                        .setPrice("-1")
+                        .setError("Insufficient Stock")
+                        .setErrorId(400)
+                        .build();
+            }
+
+        } catch (IllegalArgumentException e) {
+            return OrderLineValidationOutPut.newBuilder()
+                    .setIsValid(false)
+                    .setSellerID("")
+                    .setPrice("-1")
+                    .setError("Malformed Product ID")
+                    .setErrorId(400)
+                    .build();
+        }
     }
 
-    public Boolean isValidForOrder(UUID productID, Integer quantity){
-        Product product = productRepo.findById(productID).orElse(null);
-        if(product == null) throw new ResponseStatusException(HttpStatusCode.valueOf(404));
-        return product.getStockQuantity() >= quantity;
+    public List<OrderLineValidationOutPut> isValidBatch(List<OrderlineValidationDto> dataList) {
+        List<OrderLineValidationOutPut> results = new ArrayList<>();
+        List<UUID> validProductIds = new ArrayList<>();
+
+        for (OrderlineValidationDto data : dataList) {
+            try {
+                validProductIds.add(UUID.fromString(data.getProductID()));
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+
+        List<Product> products = productRepo.findAllById(validProductIds);
+        Map<UUID, Product> productMap = products.stream()
+                .collect(Collectors.toMap(Product::getId, p -> p));
+
+        for (OrderlineValidationDto data : dataList) {
+            try {
+                UUID productID = UUID.fromString(data.getProductID());
+                int quantity = data.getQuantity();
+                Product product = productMap.get(productID);
+
+                if (product == null) {
+                    results.add(OrderLineValidationOutPut.newBuilder()
+                            .setIsValid(false)
+                            .setSellerID("")
+                            .setPrice("-1")
+                            .setError("Product Not Found")
+                            .setErrorId(404)
+                            .build());
+                } else if (product.getStockQuantity() >= quantity) {
+                    results.add(OrderLineValidationOutPut.newBuilder()
+                            .setIsValid(true)
+                            .setSellerID(product.getSellerId().toString())
+                            .setPrice(product.getPrice().toString())
+                            .setError("")
+                            .setErrorId(-1)
+                            .build());
+                } else {
+                    results.add(OrderLineValidationOutPut.newBuilder()
+                            .setIsValid(false)
+                            .setSellerID(product.getSellerId().toString())
+                            .setPrice("-1")
+                            .setError("Insufficient Stock")
+                            .setErrorId(400)
+                            .build());
+                }
+            } catch (IllegalArgumentException e) {
+                results.add(OrderLineValidationOutPut.newBuilder()
+                        .setIsValid(false)
+                        .setSellerID("")
+                        .setPrice("-1")
+                        .setError("Malformed Product ID")
+                        .setErrorId(400)
+                        .build());
+            }
+        }
+
+        return results;
     }
 
 }

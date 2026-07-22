@@ -7,13 +7,15 @@ import com.example.orderService.entities.OrderLine;
 import com.example.orderService.mapper.OrderLineMapper;
 import com.example.orderService.mapper.OrderMapper;
 import com.example.orderService.repos.OrderRepo;
-import jakarta.transaction.TransactionScoped;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.example.grpc.ProductValidationDtoResponse;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.*;
 
 @Service
@@ -31,7 +33,6 @@ public class OrderService {
         this.productToOrderServiceGrpc = productToOrderServiceGrpc;
     }
 
-
     @Transactional
     public OrderResponseDto createEmptyOrder(UUID buyerId){
         List<OrderLine> list = new ArrayList<>();
@@ -43,16 +44,6 @@ public class OrderService {
                 .build();
 
         return orderMapper.entityToResponse(orderRepo.save(orderData));
-    }
-
-    @Transactional(readOnly = true)
-    public List<OrderLineRequestDto> validateOrderLines(List<OrderLineRequestDto> orderLines){
-        List<OrderLineRequestDto> validOrderLineList = new ArrayList<>(orderLines);
-        validOrderLineList.removeIf(orderLine -> {
-            ProductValidationDtoResponse productValidationDto = productToOrderServiceGrpc.validateOrderLine(orderLine);
-            return !productValidationDto.getIsValid();
-        });
-        return validOrderLineList;
     }
 
     @Transactional
@@ -99,44 +90,65 @@ public class OrderService {
     }
 
     @Transactional
-    public OrderResponseDto addOrderLine(UUID buyerId, OrderLineRequestDto orderLineRequestDto) {
-        OrderData orderData = orderRepo.findByBuyerId(buyerId).orElse(null);
-        if (orderData == null) return null;
+    public OrderResponseDto addOrderLine(UUID buyerID,OrderLineRequestDto orderLineRequestDto) {
+        OrderData orderData = orderRepo.findByBuyerId(buyerID).orElse(null);
+        OrderLine orderLine = orderLineMapper.requestToEntity(orderLineRequestDto);
 
-        ProductValidationDtoResponse validation = productToOrderServiceGrpc.validateOrderLine(orderLineRequestDto);
-        if (!validation.getIsValid()) {
-            return null;
+        org.example.grpc.OrderLineValidationOutPut validationOutput = productToOrderServiceGrpc.validateOrderLine(orderLineRequestDto);
+
+        String error = validationOutput.getError();
+
+        if(!error.equals("")){
+            throw new ResponseStatusException(HttpStatusCode.valueOf(validationOutput.getErrorId()),error);
         }
 
-        OrderLine newOrderLine = orderLineMapper.requestToEntity(orderLineRequestDto);
-        orderData.getOrderLines().add(newOrderLine);
+        UUID sellerID = UUID.fromString(validationOutput.getSellerID());
 
-        BigDecimal newPrice = orderData.getTotalPrice().add(newOrderLine.getTotalPrice());
-        orderData.setTotalPrice(newPrice);
+        BigDecimal onePiecePrice = new BigDecimal(validationOutput.getPrice())  ;
+        BigDecimal quantity = new BigDecimal(orderLineRequestDto.quantity());
 
-        return orderMapper.entityToResponse(orderRepo.save(orderData));
+        BigDecimal finalPrice = onePiecePrice.multiply(quantity);
+
+        orderLine.setSellerID(UUID.fromString(validationOutput.getSellerID()));
+        orderLine.setTotalPrice(finalPrice);
+        
+        List<OrderLine> list = orderData.getOrderLines();
+        list.add(orderLine);
+
+        orderData.setOrderLines(list);
+        OrderResponseDto resp = orderMapper.entityToResponse(orderData);
+        return resp;
     }
 
     @Transactional
     public OrderResponseDto addMultipleOrderLine(UUID buyerId, List<OrderLineRequestDto> orderLineRequestDtos) {
-        OrderData orderData = orderRepo.findByBuyerId(buyerId).orElse(null);
-        if (orderData == null) return null;
+        OrderData orderData = orderRepo.findByBuyerId(buyerId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found"));
 
-        List<OrderLineRequestDto> validOrderLines = validateOrderLines(orderLineRequestDtos);
+        List<org.example.grpc.OrderLineValidationOutPut> validationOutputs = productToOrderServiceGrpc.validateOrderlines(orderLineRequestDtos);
 
-        List<OrderLine> listOfAllOL = orderData.getOrderLines();
-        BigDecimal totalToBeAdded = BigDecimal.ZERO;
+        List<OrderLine> list = orderData.getOrderLines();
 
-        for (OrderLineRequestDto dto : validOrderLines) {
-            OrderLine newOrderLine = orderLineMapper.requestToEntity(dto);
-            if (newOrderLine == null) continue;
+        for (int i = 0; i < orderLineRequestDtos.size(); i++) {
+            OrderLineRequestDto requestDto = orderLineRequestDtos.get(i);
+            org.example.grpc.OrderLineValidationOutPut validationOutput = validationOutputs.get(i);
 
-            listOfAllOL.add(newOrderLine);
-            totalToBeAdded = totalToBeAdded.add(newOrderLine.getTotalPrice());
+            String error = validationOutput.getError();
+            if (!error.isEmpty()) {
+                throw new ResponseStatusException(org.springframework.http.HttpStatusCode.valueOf(validationOutput.getErrorId()), error);
+            }
+
+            OrderLine orderLine = orderLineMapper.requestToEntity(requestDto);
+
+            BigDecimal onePiecePrice = new BigDecimal(validationOutput.getPrice());
+            BigDecimal quantity = new BigDecimal(requestDto.quantity());
+            orderLine.setTotalPrice(onePiecePrice.multiply(quantity));
+            orderLine.setSellerID(UUID.fromString(validationOutput.getSellerID()));
+
+            list.add(orderLine);
         }
 
-        orderData.setTotalPrice(orderData.getTotalPrice().add(totalToBeAdded));
-        return orderMapper.entityToResponse(orderRepo.save(orderData));
+        return orderMapper.entityToResponse(orderData);
     }
 
     @Transactional
@@ -149,9 +161,7 @@ public class OrderService {
         return 0;
     }
 
-
-
-    @TransactionScoped
+    @Transactional
     public void deleteByBuyerId(UUID buyerId){
         OrderData orderData = orderRepo.findByBuyerId(buyerId).orElse(null);
         if(orderData != null){

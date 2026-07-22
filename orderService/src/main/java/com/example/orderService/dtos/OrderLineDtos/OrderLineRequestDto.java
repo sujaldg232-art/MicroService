@@ -7,8 +7,6 @@ import java.util.UUID;
 
 @Builder
 public record OrderLineRequestDto (
-        UUID sellerID,
-        Integer quantity,
-        UUID productID,
-        BigDecimal totalPrice
+        String productID,
+        int quantity
 ){}

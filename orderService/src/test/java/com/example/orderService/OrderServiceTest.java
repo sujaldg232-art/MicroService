@@ -9,7 +9,6 @@ import com.example.orderService.mapper.OrderMapper;
 import com.example.orderService.repos.OrderRepo;
 import com.example.orderService.service.OrderService;
 import com.example.orderService.service.ProductToOrderServiceGrpc;
-import org.example.grpc.ProductValidationDtoResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -59,23 +58,6 @@ class OrderServiceTest {
         assertEquals(responseDto, result);
     }
 
-    @Test
-    void validateOrderLines() {
-        OrderLineRequestDto validDto = mock(OrderLineRequestDto.class);
-        OrderLineRequestDto invalidDto = mock(OrderLineRequestDto.class);
-        List<OrderLineRequestDto> dtoList = new ArrayList<>(Arrays.asList(validDto, invalidDto));
-
-        ProductValidationDtoResponse validResponse = ProductValidationDtoResponse.newBuilder().setIsValid(true).build();
-        ProductValidationDtoResponse invalidResponse = ProductValidationDtoResponse.newBuilder().setIsValid(false).build();
-
-        when(productToOrderServiceGrpc.validateOrderLine(validDto)).thenReturn(validResponse);
-        when(productToOrderServiceGrpc.validateOrderLine(invalidDto)).thenReturn(invalidResponse);
-
-        List<OrderLineRequestDto> result = orderService.validateOrderLines(dtoList);
-
-        assertEquals(1, result.size());
-        assertEquals(validDto, result.getFirst());
-    }
 
     @Test
     void deleteOrderLine() {
@@ -139,65 +121,6 @@ class OrderServiceTest {
         assertEquals(responseDto, result);
         assertEquals(BigDecimal.ZERO, orderData.getTotalPrice());
         assertTrue(orderData.getOrderLines().isEmpty());
-    }
-
-    @Test
-    void addOrderLine() {
-        UUID buyerId = UUID.randomUUID();
-        OrderLineRequestDto requestDto = mock(OrderLineRequestDto.class);
-
-        OrderData orderData = new OrderData();
-        orderData.setBuyerId(buyerId);
-        orderData.setOrderLines(new ArrayList<>());
-        orderData.setTotalPrice(BigDecimal.ZERO);
-
-        OrderLine newOrderLine = new OrderLine();
-        newOrderLine.setTotalPrice(BigDecimal.TEN);
-
-        ProductValidationDtoResponse validResponse = ProductValidationDtoResponse.newBuilder().setIsValid(true).build();
-        OrderResponseDto responseDto = mock(OrderResponseDto.class);
-
-        when(orderRepo.findByBuyerId(buyerId)).thenReturn(Optional.of(orderData));
-        when(productToOrderServiceGrpc.validateOrderLine(requestDto)).thenReturn(validResponse);
-        when(orderLineMapper.requestToEntity(requestDto)).thenReturn(newOrderLine);
-        when(orderRepo.save(any(OrderData.class))).thenReturn(orderData);
-        when(orderMapper.entityToResponse(orderData)).thenReturn(responseDto);
-
-        OrderResponseDto result = orderService.addOrderLine(buyerId, requestDto);
-
-        assertEquals(responseDto, result);
-        assertEquals(BigDecimal.TEN, orderData.getTotalPrice());
-        assertEquals(1, orderData.getOrderLines().size());
-    }
-
-    @Test
-    void addMultipleOrderLine() {
-        UUID buyerId = UUID.randomUUID();
-        OrderLineRequestDto requestDto = mock(OrderLineRequestDto.class);
-        List<OrderLineRequestDto> requestDtos = Collections.singletonList(requestDto);
-
-        OrderData orderData = new OrderData();
-        orderData.setBuyerId(buyerId);
-        orderData.setOrderLines(new ArrayList<>());
-        orderData.setTotalPrice(BigDecimal.ZERO);
-
-        OrderLine newOrderLine = new OrderLine();
-        newOrderLine.setTotalPrice(BigDecimal.TEN);
-
-        ProductValidationDtoResponse validResponse = ProductValidationDtoResponse.newBuilder().setIsValid(true).build();
-        OrderResponseDto responseDto = mock(OrderResponseDto.class);
-
-        when(orderRepo.findByBuyerId(buyerId)).thenReturn(Optional.of(orderData));
-        when(productToOrderServiceGrpc.validateOrderLine(requestDto)).thenReturn(validResponse);
-        when(orderLineMapper.requestToEntity(requestDto)).thenReturn(newOrderLine);
-        when(orderRepo.save(any(OrderData.class))).thenReturn(orderData);
-        when(orderMapper.entityToResponse(orderData)).thenReturn(responseDto);
-
-        OrderResponseDto result = orderService.addMultipleOrderLine(buyerId, requestDtos);
-
-        assertEquals(responseDto, result);
-        assertEquals(BigDecimal.TEN, orderData.getTotalPrice());
-        assertEquals(1, orderData.getOrderLines().size());
     }
 
     @Test

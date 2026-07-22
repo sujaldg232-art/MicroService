@@ -26,30 +26,14 @@ public class OrderController {
     public ResponseEntity<OrderResponseDto> addOrderLine(
             @RequestHeader("X-User-Id") String userIdStr
             , @RequestBody OrderLineRequestDto orderLineRequestDto){
-        UUID userId = UUID.fromString(userIdStr);
-
-        OrderResponseDto orderResponseDto = orderService.addOrderLine(userId,orderLineRequestDto);
-
-        if(orderResponseDto == null){
-            return ResponseEntity.badRequest().build();
-        }
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(orderResponseDto);
+        return ResponseEntity.ok(orderService.addOrderLine(UUID.fromString(userIdStr),orderLineRequestDto));
     }
 
     @PostMapping("/addMultipleOrderLine")
     public ResponseEntity<OrderResponseDto> addOrderLine(
             @RequestHeader("X-User-Id") String userIdStr,
             @RequestBody List<OrderLineRequestDto> orderLineRequestDto) {
-
-        UUID userId = UUID.fromString(userIdStr);
-        OrderResponseDto orderResponseDto = orderService.addMultipleOrderLine(userId, orderLineRequestDto);
-
-        if (orderResponseDto == null) {
-            return ResponseEntity.badRequest().build();
-        }
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(orderResponseDto);
+        return ResponseEntity.ok(orderService.addMultipleOrderLine(UUID.fromString(userIdStr),orderLineRequestDto));
     }
 
     @PostMapping("/removeOneOrderLine")

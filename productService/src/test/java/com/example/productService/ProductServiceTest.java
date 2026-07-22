@@ -261,26 +261,4 @@ class ProductServiceTest {
         assertEquals(2, results.size());
         verify(productRepo, times(2)).save(any(Product.class));
     }
-
-    @Test
-    void isValidForOrder_True() {
-        UUID productId = UUID.randomUUID();
-        Product product = new Product();
-        product.setStockQuantity(10);
-
-        when(productRepo.findById(productId)).thenReturn(Optional.of(product));
-
-        assertTrue(productService.isValidForOrder(productId, 5));
-    }
-
-    @Test
-    void isValidForOrder_False() {
-        UUID productId = UUID.randomUUID();
-        Product product = new Product();
-        product.setStockQuantity(2);
-
-        when(productRepo.findById(productId)).thenReturn(Optional.of(product));
-
-        assertFalse(productService.isValidForOrder(productId, 5));
-    }
 }
